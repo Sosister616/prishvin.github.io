@@ -45,10 +45,14 @@
 </div>
 
 <script>
-const map = L.map('map').setView([61.5, 33.5], 6.5);
+const map = L.map('map', {
+    closePopupOnClick: false // не закрывать popup при клике по карте
+}).setView([61.5, 33.5], 6.5);
+
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '&copy; OpenStreetMap'
+    attribution: '&copy; OpenStreetMap contributors'
 }).addTo(map);
+
 
 // === массив точек с полными описаниями ===
 const points = [
@@ -232,55 +236,58 @@ const group = L.featureGroup().addTo(map);
 const markers = [];
 
 points.forEach(pt => {
-    const marker = L.marker([pt.lat, pt.lon]).addTo(map);
-
-    // Увеличим маркер, чтобы область его наведения была чуть больше
-    marker.setIcon(L.divIcon({
-        className: 'leaflet-div-icon',
-        html: `<div style="width: 24px; height: 24px; background-color: #3388ff; border-radius: 50%; border: 3px solid white; cursor: pointer;"></div>`
-    }));
-
-    // Событие при наведении на маркер
-    marker.on('mouseover', function() {
-        descriptionPopup
-            .setLatLng(marker.getLatLng()) // остаёмся на маркере
-            .setContent(`<h3>${pt.name}</h3>${pt.desc}`)
-            .openOn(map);
-    });
-
-    // Событие при уходе с маркера
-    marker.on('mouseout', function() {
-        map.closePopup(descriptionPopup);
-    });
-
-    markers.push(marker);
-    group.addLayer(marker);
+    const m = L.marker([pt.lat, pt.lon]).addTo(map);
+    m._pt = pt;
+    markers.push(m);
+    group.addLayer(m);
 });
 
+// Открытие popup при hover и удержание при перемещении по самому popup
+markers.forEach(marker => {
+    marker.on('mouseover', function() {
+        const pt = marker._pt;
+        descriptionPopup
+            .setLatLng(marker.getLatLng())
+            .setContent(`<h3>${pt.name}</h3>${pt.desc}`);
+        descriptionPopup.options.maxHeight = window.innerHeight * 0.45;
 
+        descriptionPopup.openOn(map);
+    });
+});
 
-// боковая панель
+// Закрытие popup, когда мышь выходит из popup
+map.on('popupopen', function (e) {
+    const popupEl = e.popup.getElement();
+    popupEl.addEventListener('mouseleave', function () {
+        setTimeout(() => {
+            if (!popupEl.matches(':hover')) {
+                map.closePopup(descriptionPopup);
+            }
+        }, 300);
+    });
+});
+
 const listEl = document.getElementById('pointsList');
 points.forEach(pt => {
     const div = document.createElement('div');
     div.className = 'point';
     div.innerHTML = `<div class="title">${pt.name}</div>`;
-    div.onclick = function() {
+    div.addEventListener('click', () => {
         map.setView([pt.lat, pt.lon], 11);
         descriptionPopup
             .setLatLng([pt.lat, pt.lon])
-            .setContent(`<h3>${pt.name}</h3>${pt.desc}`)
-            .openOn(map);
-    };
+            .setContent(`<h3>${pt.name}</h3>${pt.desc}`);
+        descriptionPopup.options.maxHeight = window.innerHeight * 0.45;
+
+        descriptionPopup.openOn(map);
+    });
     listEl.appendChild(div);
 });
 
-// маршрут
-const routeLine = L.polyline(points.map(p=>[p.lat,p.lon]), {
+const routeLine = L.polyline(points.map(p => [p.lat, p.lon]), {
     color:'#2b8cbe', weight:4
 }).addTo(map);
 
-// кнопки
 document.getElementById('fitAll').onclick = () => map.fitBounds(group.getBounds().pad(0.15));
 let shown = true;
 document.getElementById('toggleRoute').onclick = () => {
